@@ -1,15 +1,11 @@
 import winston from "winston";
 
-const enumerateErrorFormat = winston.format(
-  (
-    info: winston.Logform.TransformableInfo
-  ): winston.Logform.TransformableInfo => {
-    if (info instanceof Error) {
-      Object.assign(info, { message: info.stack });
-    }
-    return info;
+const enumerateErrorFormat = winston.format((info) => {
+  if (info instanceof Error) {
+    Object.assign(info, { message: info.stack });
   }
-);
+  return info;
+});
 
 const logger = winston.createLogger({
   level: process.env.NODE_ENV === "development" ? "debug" : "info",
@@ -17,14 +13,21 @@ const logger = winston.createLogger({
     enumerateErrorFormat(),
     winston.format.colorize(),
     winston.format.splat(),
-    winston.format.printf(
-      ({ level, message }): string => `${level}: ${message}`
-    )
+    winston.format.printf(({ level, message }) => `[${level}]: ${message}`)
   ),
   transports: [
     new winston.transports.Console({
       stderrLevels: ["error"],
     }),
+    ...(process.env.NODE_ENV !== "development"
+      ? [
+          new winston.transports.File({ filename: "combined.log" }),
+          new winston.transports.File({
+            filename: "error.log",
+            level: "error",
+          }),
+        ]
+      : []),
   ],
 });
 

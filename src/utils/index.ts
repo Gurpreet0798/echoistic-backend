@@ -1,2 +1,5 @@
 import logger from "./logger";
-export { logger };
+import sendVerificationEmail from "./sendVerificationEmail";
+import jwt from "./jwt";
+
+export { logger ,sendVerificationEmail, jwt};
