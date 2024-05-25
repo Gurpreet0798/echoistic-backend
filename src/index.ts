@@ -13,6 +13,9 @@ import cors from "cors";
 import createHttpError from "http-errors";
 import mongoose from "mongoose";
 import { logger } from "./utils/index";
+import routes from "./routes/index";
+import { JwtPayload } from "./interfaces/index";
+import handleSockets from "./socket";
 
 // constants
 const port: number = parseInt(process.env.PORT || "8000");
@@ -21,6 +24,12 @@ const databaseUrl: string = process.env.DATABASE_URL || "";
 const app: Application = express();
 const server: http.Server = http.createServer(app);
 const io: Server = new Server(server);
+
+// sockets 
+io.on("connection", (socket) => {
+  logger.info("socket connected successfully");
+  handleSockets(socket, io);
+});
 
 // middlewares
 app.use(morgan(process.env.NODE_ENV === "development" ? "dev" : "tiny"));
@@ -33,7 +42,15 @@ app.use(compression());
 app.use(fileUpload({ useTempFiles: true }));
 app.use(cors({ origin: "*" }));
 app.use("/files", express.static("./files"));
-// app.use("/api/v1", routes);
+app.use("/api/v1", routes);
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: JwtPayload | undefined;
+    }
+  }
+}
 
 // database
 mongoose.connect(databaseUrl).then(() => {
