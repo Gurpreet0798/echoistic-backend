@@ -1,5 +1,6 @@
 import logger from "./logger";
-import sendVerificationEmail from "./sendVerificationEmail";
+import { sendAuthOTP } from "./mail";
 import jwt from "./jwt";
+import cloudinary from "./cloudinary";
 
-export { logger ,sendVerificationEmail, jwt};
+export { logger, sendAuthOTP, jwt, cloudinary };

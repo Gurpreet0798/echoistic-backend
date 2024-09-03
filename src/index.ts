@@ -8,7 +8,6 @@ import helmet from "helmet";
 import mongoSanitize from "express-mongo-sanitize";
 import cookieParser from "cookie-parser";
 import compression from "compression";
-import fileUpload from "express-fileupload";
 import cors from "cors";
 import createHttpError from "http-errors";
 import mongoose from "mongoose";
@@ -25,7 +24,7 @@ const app: Application = express();
 const server: http.Server = http.createServer(app);
 const io: Server = new Server(server);
 
-// sockets 
+// sockets
 io.on("connection", (socket) => {
   logger.info("socket connected successfully");
   handleSockets(socket, io);
@@ -34,15 +33,15 @@ io.on("connection", (socket) => {
 // middlewares
 app.use(morgan(process.env.NODE_ENV === "development" ? "dev" : "tiny"));
 app.use(helmet());
+app.use(cors({ origin: "*", credentials: true }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(mongoSanitize());
-app.use(cookieParser());
 app.use(compression());
-app.use(fileUpload({ useTempFiles: true }));
-app.use(cors({ origin: "*" }));
 app.use("/files", express.static("./files"));
 app.use("/api/v1", routes);
+app.all("*", (req, res) => res.send("I think you are lost!"));
 
 declare global {
   namespace Express {

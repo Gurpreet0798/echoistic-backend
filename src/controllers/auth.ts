@@ -1,17 +1,14 @@
 import createHttpError from "http-errors";
 import { User } from "../models/index";
-import { sendVerificationEmail, jwt } from "../utils/index";
+import { sendAuthOTP, jwt } from "../utils/index";
 import bcrypt from "bcrypt";
 import { Response, Request, NextFunction } from "express";
 import validator from "validator";
 import { JwtPayload } from "../interfaces/index";
 
 interface TempUser {
-  name: string,
-  email: string,
-  password: string,
-  phoneNumber: string,
-  verificationCode?: string,
+  email: string;
+  verificationCode?: string;
   isVerified?: boolean;
 }
 
@@ -28,32 +25,22 @@ interface IUser {
   updatedAt: Date;
 }
 
-
 const tempUsers: Record<string, TempUser> = {};
 
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-const register = async (req: Request, res: Response, next: NextFunction) => {
+const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, email, password, phoneNumber } =
-      req.body;
+    const { email } = req.body;
 
-    if (!name || !email || !password || !phoneNumber) {
-      throw createHttpError.BadRequest("Please fill all fields.");
+    if (!email) {
+      throw createHttpError.BadRequest("Please provide email address.");
     }
 
     if (!validator.isEmail(email)) {
       throw createHttpError.BadRequest("invalid email address.");
-    }
-
-    if (!validator.isLength(password, { min: 6 })) {
-      throw createHttpError.BadRequest("password must have 6 characters");
-    }
-
-    if (!validator.isLength(phoneNumber, { min: 10, max: 10 })) {
-      throw createHttpError.BadRequest("phone number must be 10");
     }
 
     const checkDb = await User.findOne({ email });
@@ -64,14 +51,11 @@ const register = async (req: Request, res: Response, next: NextFunction) => {
     const otp = generateOTP();
 
     tempUsers[email] = {
-      name,
       email,
-      password,
-      phoneNumber,
       verificationCode: otp,
     };
 
-    sendVerificationEmail(email, otp);
+    sendAuthOTP(email, otp);
 
     return res.status(200).json({
       message: "Verification email sent. Please check your email for the OTP.",
@@ -99,49 +83,20 @@ const verify = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     const existingUser = await User.findOne({ email, isDeleted: true });
+    let user;
     if (existingUser) {
       await User.findByIdAndUpdate(existingUser._id, { isDeleted: false });
-      res.status(200).json({ message: "User successfully registered" });
-      return;
-    }
+      user = existingUser;
+    } else {
+      const newUser = new User({
+        email: tempUser.email,
+      });
+      await newUser.save();
+      user = newUser;
 
-    const newUser = new User({
-      name: tempUser.name,
-      email: tempUser.email,
-      password: tempUser.password,
-      phoneNumber: tempUser.phoneNumber,
-    });
+      tempUser.isVerified = true;
 
-    await newUser.save();
-
-    tempUser.isVerified = true;
-
-    delete tempUsers[email];
-
-    res.status(200).json({ message: "User successfully registered" });
-  } catch (error) {
-    next(error);
-  }
-};
-
-const login = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      throw createHttpError.BadRequest("Please fill all fields.");
-    }
-
-    const user = (await User.findOne({ email }).lean()) as IUser;
-
-    if (!user) {
-      throw createHttpError.NotFound("user not found");
-    }
-
-    let passwordMatches = await bcrypt.compare(password, user.password);
-
-    if (!passwordMatches) {
-      throw createHttpError.NotFound("invalid user or password");
+      delete tempUsers[email];
     }
 
     const accessToken = await jwt.sign(
@@ -166,18 +121,17 @@ const login = async (req: Request, res: Response, next: NextFunction) => {
       message: "loggedin successfully",
       user: {
         _id: user._id,
-        name: user.name,
         email: user.email,
-        phoneNumber: user.phoneNumber,
         token: accessToken,
         refreshToken: refreshToken,
       },
     });
+
+    res.status(200).json({ message: "User successfully registered" });
   } catch (error) {
     next(error);
   }
 };
-
 
 const logout = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -198,8 +152,11 @@ const logout = async (req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-
-const refreshAccessToken = async (req: Request, res: Response, next: NextFunction) => {
+const refreshAccessToken = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const refreshToken = req.cookies.refreshToken;
 
@@ -237,4 +194,4 @@ const refreshAccessToken = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
-export default { register, verify, login, logout, refreshAccessToken };
+export default { verify, login, logout, refreshAccessToken };
