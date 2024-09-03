@@ -9,7 +9,6 @@ import { JwtPayload } from "../interfaces/index";
 interface TempUser {
   email: string;
   verificationCode?: string;
-  isVerified?: boolean;
 }
 
 interface IUser {
@@ -43,11 +42,6 @@ const login = async (req: Request, res: Response, next: NextFunction) => {
       throw createHttpError.BadRequest("invalid email address.");
     }
 
-    const checkDb = await User.findOne({ email });
-    if (checkDb) {
-      throw createHttpError.Conflict("email already exist.");
-    }
-
     const otp = generateOTP();
 
     tempUsers[email] = {
@@ -78,14 +72,12 @@ const verify = async (req: Request, res: Response, next: NextFunction) => {
       throw createHttpError.BadRequest("Invalid OTP");
     }
 
-    if (tempUser.isVerified) {
-      throw createHttpError.BadRequest("User already verified");
-    }
-
-    const existingUser = await User.findOne({ email, isDeleted: true });
+    const existingUser = await User.findOne({ email });
     let user;
     if (existingUser) {
-      await User.findByIdAndUpdate(existingUser._id, { isDeleted: false });
+      if (existingUser.isDeleted) {
+        await User.findByIdAndUpdate(existingUser._id, { isDeleted: false });
+      }
       user = existingUser;
     } else {
       const newUser = new User({
@@ -94,14 +86,12 @@ const verify = async (req: Request, res: Response, next: NextFunction) => {
       await newUser.save();
       user = newUser;
 
-      tempUser.isVerified = true;
-
       delete tempUsers[email];
     }
 
     const accessToken = await jwt.sign(
       { userId: user._id },
-      "1d",
+      "30d",
       process.env.ACCESS_TOKEN_SECRET || ""
     );
 
@@ -110,12 +100,6 @@ const verify = async (req: Request, res: Response, next: NextFunction) => {
       "30d",
       process.env.REFRESH_TOKEN_SECRET || ""
     );
-
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      path: "/api/v1/auth/refresh",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
 
     res.status(200).json({
       message: "loggedin successfully",
@@ -143,8 +127,6 @@ const logout = async (req: Request, res: Response, next: NextFunction) => {
         $pull: { pushTokens: { $in: [pushToken] } },
       });
     }
-
-    res.clearCookie("refreshToken", { path: "/api/v1/auth/refresh" });
 
     res.status(200).json({ message: "logged out" });
   } catch (error) {
